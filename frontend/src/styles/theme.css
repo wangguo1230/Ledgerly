@@ -1,0 +1,401 @@
+/* ============================================================
+   松松记账 · 「温暖账本」设计系统
+   米色纸感 · 墨色文字 · 赤陶点缀 · Fraunces 衰线大数字
+   ============================================================ */
+
+:root {
+  /* —— 品牌色板 —— */
+  --ink: #2b2620; /* 主文字：暖墨色 */
+  --ink-soft: #6b6357; /* 次要文字 */
+  --ink-faint: #9b9384; /* 占位/弱化 */
+  --paper: #f7f3ec; /* 页面纸色 */
+  --paper-2: #efe8db; /* 分隔/底纹 */
+  --surface: #fffdf8; /* 卡片表面 */
+  --surface-2: #fbf6ec; /* 次级表面 */
+  --line: #e7decf; /* 描边 */
+  --line-soft: #f0e8da;
+
+  --terra: #b9472f; /* 朱砂红：与账簿统一的品牌主色 */
+  --terra-deep: #8f3322;
+  --terra-tint: #f1ddd2;
+  --desk: #d3c6a6; /* 书桌：账页摊放的台面 */
+  --income: #2f5d7c; /* 收入：账簿蓝墨 */
+  --income-tint: #dde6ed;
+  --expense: #bf4733; /* 支出：砖红 */
+  --expense-tint: #f6e2dc;
+
+  /* 暖色阴影（非灰） */
+  --shadow-sm: 0 1px 2px rgba(74, 56, 38, 0.06);
+  --shadow: 0 6px 20px -8px rgba(74, 56, 38, 0.18), 0 1px 2px rgba(74, 56, 38, 0.05);
+  --shadow-lg: 0 18px 48px -16px rgba(74, 56, 38, 0.26);
+
+  --radius: 14px;
+  --radius-sm: 10px;
+
+  --font-display: 'Fraunces', 'Songti SC', 'PingFang SC', serif;
+  --font-sans: 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei',
+    sans-serif;
+
+  /* —— 覆盖 Element Plus 语义令牌 —— */
+  --el-color-primary: var(--terra);
+  --el-color-primary-light-3: #cd7361;
+  --el-color-primary-light-5: #db998c;
+  --el-color-primary-light-7: #e9c5bd;
+  --el-color-primary-light-8: #f0d7d1;
+  --el-color-primary-light-9: #f7ebe7;
+  --el-color-primary-dark-2: var(--terra-deep);
+
+  --el-color-success: var(--income);
+  --el-color-success-light-3: #5f7d94;
+  --el-color-success-light-5: #93a9bb;
+  --el-color-success-light-7: #c3d0db;
+  --el-color-success-light-8: #d6dfe7;
+  --el-color-success-light-9: #e8eef3;
+
+  --el-color-danger: var(--expense);
+  --el-color-danger-light-3: #cd7164;
+  --el-color-danger-light-5: #dc9d93;
+  --el-color-danger-light-7: #ebc8c2;
+  --el-color-danger-light-8: #f2dbd6;
+  --el-color-danger-light-9: #f8ece9;
+  --el-color-error: var(--expense);
+
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: #564e42;
+  --el-text-color-secondary: var(--ink-soft);
+  --el-text-color-placeholder: var(--ink-faint);
+
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--paper);
+  --el-bg-color-overlay: var(--surface);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: var(--surface-2);
+  --el-fill-color-lighter: var(--surface-2);
+  --el-fill-color: var(--paper-2);
+
+  --el-border-color: var(--line);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line-soft);
+  --el-border-color-extra-light: var(--line-soft);
+
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius-small: 8px;
+  --el-font-family: var(--font-sans);
+
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow: var(--shadow);
+}
+
+/* —— 基础 —— */
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background-color: var(--paper);
+  /* 极细纸纹：双层柔和暖色径向渐变 + 细噪点 */
+  background-image:
+    radial-gradient(1200px 600px at 100% -10%, rgba(194, 104, 60, 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(63, 125, 90, 0.045), transparent 55%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* 纸张颗粒覆盖层 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+/* —— 数字：Fraunces 衰线 + 等宽对齐 —— */
+.num,
+.amount {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.amount--income {
+  color: var(--income);
+}
+.amount--expense {
+  color: var(--expense);
+}
+.amount--balance {
+  color: var(--ink);
+}
+
+/* —— 通用版式 —— */
+.page-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 18px;
+  letter-spacing: 0.01em;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.flex-spacer {
+  flex: 1;
+}
+
+/* ============================================================
+   Element Plus 全局重塑
+   ============================================================ */
+
+/* 纸页区块：账簿纸面、方正、墨色页眉线 */
+.el-card {
+  border: 1px solid #d8cba9;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 #fff inset, 0 14px 34px -22px rgba(70, 50, 25, 0.4);
+  background: #f0e9d5;
+  overflow: hidden;
+}
+.el-card__header {
+  border-bottom: 1.5px solid #2a2418;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #2a2418;
+  padding: 14px 20px;
+}
+
+/* 按钮：方正、红印主按钮 */
+.el-button {
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  transition: transform 0.1s ease, background-color 0.2s ease;
+}
+.el-button:active {
+  transform: translateY(1px);
+}
+.el-button--primary {
+  box-shadow: none;
+  border-color: var(--terra-deep);
+}
+.el-button--large {
+  border-radius: 4px;
+}
+
+/* 下拉菜单：纸页 */
+.el-dropdown-menu {
+  background: #f3ecd8;
+  border: 1px solid #d8cba9;
+  border-radius: 3px;
+}
+.el-dropdown-menu__item {
+  color: #2a2418;
+}
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  background: rgba(185, 71, 47, 0.1);
+  color: var(--terra-deep);
+}
+
+/* 表格：账簿横纹 + 牛皮纸表头 + 墨线 */
+.el-table {
+  --el-table-border-color: transparent;
+  --el-table-header-bg-color: #e8dfc6;
+  --el-table-row-hover-bg-color: rgba(185, 71, 47, 0.06);
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  background: transparent;
+  color: #2a2418;
+}
+.el-table th.el-table__cell {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #6f6450;
+  background: #e8dfc6;
+  border-bottom: 1.5px solid #2a2418;
+}
+.el-table td.el-table__cell {
+  border-bottom: 1px solid rgba(70, 110, 130, 0.22);
+}
+.el-table__inner-wrapper::before {
+  display: none;
+}
+
+/* 输入/选择：纸面方正 + 墨边 */
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 3px;
+  background: #f6f0df;
+  box-shadow: 0 0 0 1px #c9bb9c inset;
+}
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--terra) inset !important;
+}
+
+/* 标签：方正 */
+.el-tag {
+  border-radius: 2px;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+/* 对话框：纸页 + 红色页眉线 */
+.el-dialog {
+  border-radius: 4px;
+  border-top: 3px solid var(--terra);
+  box-shadow: 0 30px 60px -24px rgba(70, 50, 25, 0.5);
+  background: #f3ecd8;
+  overflow: hidden;
+}
+.el-dialog__header {
+  margin-right: 0;
+}
+.el-dialog__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #2a2418;
+}
+
+/* 分段控制器：方正牛皮纸 */
+.el-segmented {
+  --el-segmented-item-selected-bg-color: #f6f0df;
+  background: #e2d8be;
+  border-radius: 3px;
+  padding: 3px;
+}
+.el-segmented .el-segmented__item.is-selected {
+  box-shadow: 0 1px 2px rgba(70, 50, 25, 0.2);
+  border-radius: 2px;
+  font-weight: 700;
+}
+
+/* 单选按钮组（收支切换等）：方正、激活红 */
+.el-radio-button__inner {
+  border-color: #c9bb9c;
+  background: #f6f0df;
+  color: #2a2418;
+}
+.el-radio-button:first-child .el-radio-button__inner {
+  border-radius: 3px 0 0 3px;
+}
+.el-radio-button:last-child .el-radio-button__inner {
+  border-radius: 0 3px 3px 0;
+}
+.el-radio-button.is-active .el-radio-button__inner {
+  background: var(--terra);
+  border-color: var(--terra);
+  box-shadow: -1px 0 0 0 var(--terra);
+}
+
+/* 空状态 */
+.el-empty__description p {
+  color: #9a8f78;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9bb9c;
+  border-radius: 6px;
+  border: 3px solid var(--desk);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b9a87f;
+}
+
+/* 账页：套在桌面上的纸页（数据页用） */
+.sheet {
+  background: #f0e9d5;
+  border: 1px solid #d8cba9;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 #fff inset, 0 16px 38px -24px rgba(70, 50, 25, 0.42);
+  padding: 22px 26px;
+}
+.page-head {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #2a2418;
+  border-bottom: 1.5px solid #2a2418;
+  padding-bottom: 10px;
+  margin: 0 0 16px;
+}
+
+/* ============================================================
+   动效
+   ============================================================ */
+@keyframes ul-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ul-rise {
+  animation: ul-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 交错入场：给容器加 .ul-stagger，子项依次浮现 */
+.ul-stagger > * {
+  animation: ul-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ul-stagger > *:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.ul-stagger > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.ul-stagger > *:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.ul-stagger > *:nth-child(4) {
+  animation-delay: 0.22s;
+}
+.ul-stagger > *:nth-child(5) {
+  animation-delay: 0.28s;
+}
+
+.hover-lift {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

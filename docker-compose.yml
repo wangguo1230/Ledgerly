@@ -1,0 +1,22 @@
+# 一键启动开发用 PostgreSQL
+# 用法：docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ul-pg
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+      POSTGRES_DB: ledger
+    ports:
+      - '5433:5432'
+    volumes:
+      - ul_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ledger -d ledger']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  ul_pg_data:

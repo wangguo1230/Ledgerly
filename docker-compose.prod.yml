@@ -1,0 +1,41 @@
+# 松松记账(Ledgerly) · 生产部署（1Panel）
+# 镜像由 GitHub Actions 自动构建发布到 GHCR，服务器直接拉取运行：
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# 说明：
+# - backend 接入外部网络 1panel-network，从而能用容器名 1Panel-postgresql-6MBx 访问 1Panel 的 PostgreSQL。
+# - backend 同时接入内部网络，供 frontend(Nginx) 以服务名 backend 反代 /api。
+# - 数据库连接、JWT 密钥等由 backend/.env 注入（env_file），需在服务器上自行放置 backend/.env。
+# - 对外只暴露 frontend 的端口（默认 8090），在 1Panel 里把域名反向代理到它并配置 HTTPS。
+
+services:
+  backend:
+    image: ghcr.io/wangguo1230/ledgerly-backend:latest
+    container_name: songsong-backend
+    restart: unless-stopped
+    pull_policy: always
+    env_file:
+      - ./backend/.env
+    networks:
+      - 1panel-network   # 访问 1Panel 托管的 PostgreSQL
+      - songsong-internal
+
+  frontend:
+    image: ghcr.io/wangguo1230/ledgerly-frontend:latest
+    container_name: songsong-frontend
+    restart: unless-stopped
+    pull_policy: always
+    depends_on:
+      - backend
+    ports:
+      - '8090:80'        # 对外端口；在 1Panel 用反向代理 + HTTPS 指向此端口
+    networks:
+      - songsong-internal
+
+networks:
+  1panel-network:
+    external: true
+    name: 1panel-network
+  songsong-internal:
+    driver: bridge

@@ -1,0 +1,19 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+frontend/dist/
+
+# 环境变量
+.env
+
+# 运行时数据（旧 SQLite，已迁移到 PostgreSQL）
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# 日志与系统文件
+*.log
+.DS_Store
