@@ -17,6 +17,7 @@ export interface CreateTransactionInput {
   category_id?: number | null;
   product_id?: number | null;
   quantity?: number | null;
+  cost_snapshot?: number | null; // 本笔成本（单价，分）；不传则取商品当前成本价
   source_platform_id?: number | null;
   occurred_at: string;
   remark?: string | null;
@@ -159,7 +160,11 @@ export class TransactionService {
     if (input.category_id != null) {
       await this.assertCategory(input.category_id, input.ledger_id, input.flow_type);
     }
-    const costSnapshot = await this.resolveCostSnapshot(input.product_id, input.ledger_id);
+    const costSnapshot = await this.resolveCostSnapshot(
+      input.product_id,
+      input.ledger_id,
+      input.cost_snapshot,
+    );
     if (input.source_platform_id != null) await this.assertPlatform(userId, input.source_platform_id);
 
     const quantity = this.normalizeQuantity(input.product_id, input.quantity);
@@ -203,12 +208,31 @@ export class TransactionService {
       if (input.source_platform_id != null) await this.assertPlatform(userId, input.source_platform_id);
       fields.source_platform_id = input.source_platform_id;
     }
-    if (input.product_id !== undefined || input.quantity !== undefined) {
+    if (
+      input.product_id !== undefined ||
+      input.quantity !== undefined ||
+      input.cost_snapshot !== undefined
+    ) {
       const productId = input.product_id !== undefined ? input.product_id : current.product_id;
       const rawQty = input.quantity !== undefined ? input.quantity : current.quantity;
       fields.product_id = productId;
       fields.quantity = this.normalizeQuantity(productId, rawQty);
-      fields.cost_snapshot = await this.resolveCostSnapshot(productId, current.ledger_id);
+
+      const productChanged = input.product_id !== undefined && input.product_id !== current.product_id;
+      if (productId == null) {
+        fields.cost_snapshot = null;
+      } else if (input.cost_snapshot !== undefined) {
+        // 显式传了本笔成本：用它（校验归属/非负）
+        fields.cost_snapshot = await this.resolveCostSnapshot(
+          productId,
+          current.ledger_id,
+          input.cost_snapshot,
+        );
+      } else if (productChanged) {
+        // 换了商品又没给成本：取新商品当前成本价
+        fields.cost_snapshot = await this.resolveCostSnapshot(productId, current.ledger_id);
+      }
+      // 否则（仅改数量、商品未变、未传成本）：保留原成本快照不动
     }
 
     await this.repo.update(id, fields);
@@ -240,15 +264,24 @@ export class TransactionService {
     if (p.user_id !== userId) throw new ForbiddenError('无权使用该平台');
   }
 
-  /** 关联商品时按单位成本价快照，避免改价回溯历史利润。 */
+  /**
+   * 关联商品时确定本笔成本快照（单价）。
+   * 传了 override（本笔成本）就用它（每笔可不同）；否则取商品当前成本价。
+   * 一律快照存下，避免后续改价回溯历史利润。
+   */
   private async resolveCostSnapshot(
     productId: number | null | undefined,
     ledgerId: number,
+    override?: number | null,
   ): Promise<number | null> {
     if (productId == null) return null;
     const product = await this.db.one<ProductRow>('SELECT * FROM product WHERE id = $1', [productId]);
     if (!product) throw new NotFoundError('商品', productId);
     if (product.ledger_id !== ledgerId) throw new ValidationError('商品不属于该账本（账本隔离）');
+    if (override != null) {
+      assertNonNegativeCents(override, '成本');
+      return override;
+    }
     return product.cost_price;
   }
 

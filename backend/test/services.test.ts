@@ -315,6 +315,78 @@ describe('商品与利润核算（成功标准 A2.1 / A2.2）', () => {
   });
 });
 
+describe('每笔单独填成本（成本随批变化）', () => {
+  it('显式传 cost_snapshot 覆盖商品默认成本，利润按本笔成本算', async () => {
+    const { c, userId } = await freshContainer(false);
+    const biz = await c.ledger.create(userId, { name: '店', type: 'business' });
+    const cat = await c.category.create(userId, { ledger_id: biz.id, name: '卖货', flow_type: 'income' });
+    const prod = await c.product.create(userId, {
+      ledger_id: biz.id,
+      name: '卡',
+      cost_price: 300,
+      sale_price: 500,
+    });
+    // 这批实际进价 3.50（350分），单独填
+    const tx = await c.transaction.create(userId, {
+      ledger_id: biz.id,
+      flow_type: 'income',
+      amount: 5000,
+      category_id: cat.id,
+      product_id: prod.id,
+      quantity: 10,
+      cost_snapshot: 350,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    expect(tx.cost_snapshot).toBe(350);
+    const profit = await c.stats.productProfit(userId, { ledger_id: biz.id });
+    expect(profit[0].cost).toBe(3500);
+    expect(profit[0].profit).toBe(1500);
+  });
+
+  it('不传成本时仍取商品当前成本价（默认行为不变）', async () => {
+    const { c, userId } = await freshContainer(false);
+    const biz = await c.ledger.create(userId, { name: '店', type: 'business' });
+    const prod = await c.product.create(userId, {
+      ledger_id: biz.id,
+      name: '卡',
+      cost_price: 300,
+      sale_price: 500,
+    });
+    const tx = await c.transaction.create(userId, {
+      ledger_id: biz.id,
+      flow_type: 'income',
+      amount: 500,
+      product_id: prod.id,
+      quantity: 1,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    expect(tx.cost_snapshot).toBe(300);
+  });
+
+  it('只改数量不改成本时，保留原本笔成本不被重置', async () => {
+    const { c, userId } = await freshContainer(false);
+    const biz = await c.ledger.create(userId, { name: '店', type: 'business' });
+    const prod = await c.product.create(userId, {
+      ledger_id: biz.id,
+      name: '卡',
+      cost_price: 300,
+      sale_price: 500,
+    });
+    const tx = await c.transaction.create(userId, {
+      ledger_id: biz.id,
+      flow_type: 'income',
+      amount: 5000,
+      product_id: prod.id,
+      quantity: 10,
+      cost_snapshot: 350,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    const updated = await c.transaction.update(userId, tx.id, { quantity: 8 });
+    expect(updated.quantity).toBe(8);
+    expect(updated.cost_snapshot).toBe(350); // 仍是本笔成本，未被商品成本重置
+  });
+});
+
 describe('交易更新一致性', () => {
   it('仅改收支方向而未改类目时，自动置空不一致的旧类目', async () => {
     const { c, userId } = await freshContainer(false);

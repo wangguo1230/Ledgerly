@@ -12,6 +12,7 @@ import type { Category, FlowType, Product, SourcePlatform } from '@/api/types';
 import { yuanToCents, centsToYuan, formatCents } from '@/utils/money';
 import { now } from '@/utils/date';
 import RichTextEditor from '@/components/RichTextEditor.vue';
+import AmountInput from '@/components/AmountInput.vue';
 
 const store = useLedgerStore();
 const { currentId, isBusiness } = storeToRefs(store);
@@ -30,6 +31,7 @@ const platforms = ref<SourcePlatform[]>([]);
 const products = ref<Product[]>([]);
 const productId = ref<number | null>(null);
 const quantity = ref(1);
+const cost = ref<number | null>(null); // 本笔成本(单价，分)
 
 const flowCategories = computed(() => categories.value.filter((c) => c.flow_type === flow.value));
 
@@ -47,12 +49,17 @@ const grossProfitCents = computed(() => {
   } catch {
     return null;
   }
-  return cents - p.cost_price * quantity.value;
+  const unitCost = cost.value ?? p.cost_price;
+  return cents - unitCost * quantity.value;
 });
 
 function onProductChange() {
-  if (productId.value == null) return;
+  if (productId.value == null) {
+    cost.value = null;
+    return;
+  }
   if (quantity.value < 1) quantity.value = 1;
+  cost.value = formProduct.value?.cost_price ?? null; // 默认带出商品成本，可改
   fillFromProduct();
 }
 function onQtyChange() {
@@ -84,6 +91,7 @@ watch(flow, () => {
   if (flow.value !== 'income') {
     productId.value = null;
     quantity.value = 1;
+    cost.value = null;
   }
 });
 
@@ -114,6 +122,7 @@ async function save(continueAfter: boolean) {
       category_id: categoryId.value,
       product_id: linkProduct ? productId.value : null,
       quantity: linkProduct ? quantity.value : null,
+      cost_snapshot: linkProduct ? cost.value : null,
       source_platform_id: platformId.value,
       occurred_at: now(),
       remark: remark.value || null,
@@ -125,6 +134,7 @@ async function save(continueAfter: boolean) {
     remark.value = '';
     productId.value = null;
     quantity.value = 1;
+    cost.value = null;
     if (!continueAfter) {
       platformId.value = null;
     }
@@ -215,6 +225,11 @@ const isIncome = computed(() => flow.value === 'income');
             style="width: 128px"
             @change="onQtyChange"
           />
+        </div>
+        <div v-if="productId" class="cost-line">
+          <span class="cost-tag">本笔成本</span>
+          <div class="cost-input"><AmountInput v-model="cost" /></div>
+          <span class="cost-note">默认商品成本，可改成这批进价</span>
         </div>
         <div v-if="grossProfitCents != null" class="qprofit">
           本笔毛利 ≈
@@ -463,6 +478,25 @@ const isIncome = computed(() => flow.value === 'income');
 .opt-empty {
   padding: 8px 0;
   text-align: center;
+  color: var(--ink-faint);
+}
+.cost-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.cost-tag {
+  font-size: 13px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+.cost-input {
+  width: 140px;
+  flex-shrink: 0;
+}
+.cost-note {
+  font-size: 12px;
   color: var(--ink-faint);
 }
 .qprofit {

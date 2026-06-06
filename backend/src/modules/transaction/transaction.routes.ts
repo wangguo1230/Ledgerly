@@ -23,6 +23,7 @@ const createSchema = z.object({
   category_id: z.coerce.number().int().positive().nullable().optional(),
   product_id: z.coerce.number().int().positive().nullable().optional(),
   quantity: z.coerce.number().int().nullable().optional(),
+  cost_snapshot: zCents.nullable().optional(),
   source_platform_id: z.coerce.number().int().positive().nullable().optional(),
   occurred_at: z.string().min(1),
   remark: z.string().max(20000).nullable().optional(),

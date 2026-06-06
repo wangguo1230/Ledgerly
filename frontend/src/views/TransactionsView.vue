@@ -104,6 +104,7 @@ const form = reactive<{
   category_id: number | null;
   product_id: number | null;
   quantity: number | null;
+  cost_snapshot: number | null;
   source_platform_id: number | null;
   occurred_at: string;
   remark: string;
@@ -113,6 +114,7 @@ const form = reactive<{
   category_id: null,
   product_id: null,
   quantity: null,
+  cost_snapshot: null,
   source_platform_id: null,
   occurred_at: now(),
   remark: '',
@@ -126,6 +128,7 @@ function openCreate() {
     category_id: null,
     product_id: null,
     quantity: null,
+    cost_snapshot: null,
     source_platform_id: null,
     occurred_at: now(),
     remark: '',
@@ -141,6 +144,7 @@ function openEdit(row: Transaction) {
     category_id: row.category_id,
     product_id: row.product_id,
     quantity: row.quantity,
+    cost_snapshot: row.cost_snapshot,
     source_platform_id: row.source_platform_id,
     occurred_at: row.occurred_at,
     remark: row.remark ?? '',
@@ -174,6 +178,7 @@ async function submit() {
     category_id: form.category_id,
     product_id: form.product_id,
     quantity: form.quantity,
+    cost_snapshot: form.product_id ? form.cost_snapshot : null,
     source_platform_id: form.source_platform_id,
     occurred_at: form.occurred_at,
     remark: form.remark || null,
@@ -213,19 +218,25 @@ function autoFillAmount() {
   form.amount = p.sale_price * (form.quantity ?? 1);
 }
 function onProductChange() {
-  if (form.product_id == null) return;
+  if (form.product_id == null) {
+    form.cost_snapshot = null;
+    return;
+  }
   if (!form.quantity || form.quantity < 1) form.quantity = 1;
+  // 默认带出商品当前成本，可改成本批实际进价
+  form.cost_snapshot = formProduct.value?.cost_price ?? null;
   autoFillAmount();
 }
 function onQtyChange() {
   if (form.product_id != null) autoFillAmount();
 }
 
-/** 本笔毛利 = 售出金额 − 成本价 × 数量 */
+/** 本笔毛利 = 售出金额 − 本笔成本 × 数量（本笔成本默认取商品成本价） */
 const grossProfitCents = computed(() => {
   const p = formProduct.value;
   if (!p || form.amount == null) return null;
-  return form.amount - p.cost_price * (form.quantity ?? 1);
+  const unitCost = form.cost_snapshot ?? p.cost_price;
+  return form.amount - unitCost * (form.quantity ?? 1);
 });
 
 // 生意账本的收入：备注升级为「内容」富文本
@@ -352,6 +363,12 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
               </template>
             </el-select>
           </el-form-item>
+          <el-form-item v-if="form.product_id" label="本笔成本">
+            <div class="cost-row">
+              <div class="cost-input"><AmountInput v-model="form.cost_snapshot" /></div>
+              <span class="cost-hint">默认商品成本，可改成这批实际进价</span>
+            </div>
+          </el-form-item>
           <el-form-item v-if="form.product_id" label="数量">
             <div class="qty-row">
               <el-input-number v-model="form.quantity" :min="1" @change="onQtyChange" />
@@ -421,6 +438,20 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
   display: flex;
   align-items: center;
   gap: 14px;
+}
+.cost-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.cost-input {
+  width: 150px;
+  flex-shrink: 0;
+}
+.cost-hint {
+  font-size: 12px;
+  color: var(--ink-faint);
 }
 .profit-hint {
   font-size: 13px;
