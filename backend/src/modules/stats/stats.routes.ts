@@ -22,7 +22,7 @@ export function registerStatsRoutes(app: FastifyInstance, c: Container): void {
 
   app.get('/stats/trend', async (req) => {
     const q = parse(
-      rangeQuery.extend({ granularity: z.enum(['day', 'month']).optional() }),
+      rangeQuery.extend({ granularity: z.enum(['day', 'week', 'month']).optional() }),
       req.query,
     );
     return c.stats.trend(req.userId, q, q.granularity ?? 'month');

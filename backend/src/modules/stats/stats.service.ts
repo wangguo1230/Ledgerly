@@ -105,18 +105,24 @@ export class StatsService {
     );
   }
 
-  /** 收支趋势（按月或按日） */
+  /** 收支趋势（按日/按周/按月） */
   async trend(
     userId: number,
     r: StatRange,
-    granularity: 'day' | 'month' = 'month',
+    granularity: 'day' | 'week' | 'month' = 'month',
   ): Promise<TrendPoint[]> {
     await assertLedgerOwned(this.db, userId, r.ledger_id);
     const { clause, params } = this.rangeClause(r);
-    const len = granularity === 'day' ? 10 : 7; // YYYY-MM-DD / YYYY-MM
+    // 周用 ISO 年-周（如 2026-W23），日/月用字符串截取
+    const periodExpr =
+      granularity === 'day'
+        ? 'substr(occurred_at, 1, 10)'
+        : granularity === 'week'
+          ? `to_char(occurred_at::timestamp, 'IYYY-"W"IW')`
+          : 'substr(occurred_at, 1, 7)';
     return this.db.query<TrendPoint>(
       `SELECT
-         substr(occurred_at, 1, ${len}) AS period,
+         ${periodExpr} AS period,
          COALESCE(SUM(CASE WHEN flow_type='income'  THEN amount END), 0) AS income,
          COALESCE(SUM(CASE WHEN flow_type='expense' THEN amount END), 0) AS expense
        FROM txn WHERE ${clause}

@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia';
 import { useLedgerStore } from '@/stores/ledger';
 import { statsApi, transactionApi, categoryApi } from '@/api';
 import type { Summary, TrendPoint, Transaction, Category } from '@/api/types';
-import { monthRange } from '@/utils/date';
+import { monthRange, presetRange } from '@/utils/date';
 import { centsToYuan, formatCents } from '@/utils/money';
 import { stripHtml } from '@/utils/html';
 
@@ -18,6 +18,10 @@ const recent = ref<Transaction[]>([]);
 const categories = ref<Category[]>([]);
 const loading = ref(false);
 
+// 汇总区间：今日 / 本周 / 本月
+const sumPreset = ref<'today' | 'week' | 'month'>('month');
+const sumLabel = computed(() => ({ today: '今日', week: '本周', month: '本月' })[sumPreset.value]);
+
 const catMap = computed(() => new Map(categories.value.map((c) => [c.id, c.name])));
 
 // 中文年月（账簿抬头）
@@ -29,27 +33,34 @@ const cnDate = computed(() => {
   return { y, m };
 });
 
+async function loadSummary() {
+  if (!currentId.value) return;
+  const { from, to } = presetRange(sumPreset.value);
+  summary.value = await statsApi.summary({ ledger_id: currentId.value, from, to });
+}
+
 async function load() {
   if (!currentId.value) return;
   loading.value = true;
-  const [from, to] = monthRange();
   const id = currentId.value;
+  const [mFrom, mTo] = monthRange();
   try {
-    const [s, t, r, cats] = await Promise.all([
-      statsApi.summary({ ledger_id: id, from, to }),
-      statsApi.trend({ ledger_id: id, granularity: 'month' }),
+    const [t, r, cats] = await Promise.all([
+      // 趋势改为「本月按日」，反映每天波动
+      statsApi.trend({ ledger_id: id, from: mFrom, to: mTo, granularity: 'day' }),
       transactionApi.list({ ledger_id: id, pageSize: 8, page: 1 }),
       categoryApi.list(id),
     ]);
-    summary.value = s;
     trend.value = t;
     recent.value = r.items;
     categories.value = cats;
+    await loadSummary();
   } finally {
     loading.value = false;
   }
 }
 watch(currentId, load, { immediate: true });
+watch(sumPreset, loadSummary);
 
 function abstractOf(t: Transaction): string {
   return stripHtml(t.remark) || catMap.value.get(t.category_id ?? -1) || '—';
@@ -109,7 +120,7 @@ const trendOption = computed(() => ({
 
     <!-- 橡皮图章 -->
     <div class="stamp" :class="{ red: summary.balance >= 0 }">
-      {{ summary.balance >= 0 ? '本月盈余' : '本月赤字' }}
+      {{ sumLabel }}{{ summary.balance >= 0 ? '盈余' : '赤字' }}
     </div>
 
     <div class="page-inner">
@@ -117,11 +128,17 @@ const trendOption = computed(() => ({
       <header class="ledger-head">
         <div class="book-title">流水账</div>
         <div class="book-date">{{ cnDate.y }} 年 · {{ cnDate.m }} 月</div>
+        <div class="flex-spacer" />
+        <div class="sum-toggle">
+          <button :class="{ on: sumPreset === 'today' }" @click="sumPreset = 'today'">今日</button>
+          <button :class="{ on: sumPreset === 'week' }" @click="sumPreset = 'week'">本周</button>
+          <button :class="{ on: sumPreset === 'month' }" @click="sumPreset = 'month'">本月</button>
+        </div>
       </header>
 
       <!-- 结存总计行（莱德点引线） -->
       <div class="balance-line">
-        <span class="bl-label">本月结存</span>
+        <span class="bl-label">{{ sumLabel }}结存</span>
         <span class="bl-dots" />
         <span class="bl-amount num" :class="{ red: summary.balance < 0 }">
           ¥{{ formatCents(summary.balance) }}
@@ -132,7 +149,7 @@ const trendOption = computed(() => ({
         <span class="t-sep">│</span>
         <span class="t-out">支出合计 <b class="num">¥{{ formatCents(summary.expense) }}</b></span>
         <span class="t-sep">│</span>
-        <span class="t-cnt">本月 {{ summary.count }} 笔</span>
+        <span class="t-cnt">{{ sumLabel }} {{ summary.count }} 笔</span>
       </div>
 
       <!-- 流水表（真账簿横纹 + 红蓝双色） -->
@@ -155,7 +172,7 @@ const trendOption = computed(() => ({
 
       <!-- 墨线趋势 -->
       <div class="trend-block">
-        <div class="trend-title">收支趋势 · 墨迹</div>
+        <div class="trend-title">本月每日 · 墨迹</div>
         <v-chart v-if="trend.length" :option="trendOption" style="height: 220px" autoresize />
         <div v-else class="trend-empty">— 暂无趋势 —</div>
       </div>
@@ -260,6 +277,30 @@ const trendOption = computed(() => ({
   font-size: 15px;
   color: #6f6450;
   letter-spacing: 2px;
+}
+.sum-toggle {
+  display: flex;
+  gap: 2px;
+  background: #e2d8be;
+  border-radius: 3px;
+  padding: 3px;
+  align-self: center;
+}
+.sum-toggle button {
+  border: none;
+  background: transparent;
+  padding: 6px 16px;
+  border-radius: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6f6450;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sum-toggle button.on {
+  background: #f6f0df;
+  box-shadow: 0 1px 2px rgba(70, 50, 25, 0.2);
+  color: var(--terra-deep);
 }
 
 /* 结存行 + 引线 */

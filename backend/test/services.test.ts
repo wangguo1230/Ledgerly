@@ -491,6 +491,27 @@ describe('统计聚合 Stats', () => {
       { period: '2026-06', income: 0, expense: 3000 },
     ]);
   });
+
+  it('trend 按周聚合（ISO 年-周）', async () => {
+    const { c, userId } = await freshContainer(false);
+    const lg = await c.ledger.create(userId, { name: 'A', type: 'personal' });
+    await c.transaction.create(userId, {
+      ledger_id: lg.id,
+      flow_type: 'income',
+      amount: 100,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    await c.transaction.create(userId, {
+      ledger_id: lg.id,
+      flow_type: 'income',
+      amount: 200,
+      occurred_at: '2026-06-15 10:00:00',
+    });
+    const trend = await c.stats.trend(userId, { ledger_id: lg.id }, 'week');
+    expect(trend).toHaveLength(2);
+    expect(trend.reduce((s, p) => s + p.income, 0)).toBe(300);
+    expect(trend[0].period).toMatch(/^2026-W\d{2}$/);
+  });
 });
 
 describe('来源平台字典（按用户）', () => {

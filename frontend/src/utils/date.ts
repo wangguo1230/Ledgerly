@@ -30,6 +30,43 @@ export function monthRange(base = new Date()): [string, string] {
   return [formatDateTime(first), formatDateTime(last)];
 }
 
+/** 今日起止 */
+export function todayRange(base = new Date()): [string, string] {
+  const s = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
+  const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+  return [formatDateTime(s), formatDateTime(e)];
+}
+
+/** 本周起止（周一 ~ 周日） */
+export function weekRange(base = new Date()): [string, string] {
+  const day = (base.getDay() + 6) % 7; // 0=周一
+  const mon = new Date(base.getFullYear(), base.getMonth(), base.getDate() - day, 0, 0, 0);
+  const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6, 23, 59, 59);
+  return [formatDateTime(mon), formatDateTime(sun)];
+}
+
+/** 最近 n 天（含今天） */
+export function lastNDays(n: number, base = new Date()): [string, string] {
+  const s = new Date(base.getFullYear(), base.getMonth(), base.getDate() - (n - 1), 0, 0, 0);
+  const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+  return [formatDateTime(s), formatDateTime(e)];
+}
+
+export type RangePreset = 'today' | 'week' | 'month' | 'last30';
+
+/** 预设区间 -> { from, to } */
+export function presetRange(preset: RangePreset): { from: string; to: string } {
+  const r =
+    preset === 'today'
+      ? todayRange()
+      : preset === 'week'
+        ? weekRange()
+        : preset === 'last30'
+          ? lastNDays(30)
+          : monthRange();
+  return { from: r[0], to: r[1] };
+}
+
 /** 把日期选择器的 [startDate, endDate] 转为含边界的 datetime 区间 */
 export function dayRangeToDateTime(range: [Date, Date] | null): {
   from?: string;

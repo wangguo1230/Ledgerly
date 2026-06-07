@@ -5,14 +5,14 @@ import { storeToRefs } from 'pinia';
 import { useLedgerStore } from '@/stores/ledger';
 import { statsApi } from '@/api';
 import type { CategoryStat, PlatformStat, TrendPoint } from '@/api/types';
-import { dayRangeToDateTime } from '@/utils/date';
 import { centsToYuan } from '@/utils/money';
+import RangeBar from '@/components/RangeBar.vue';
 
 const store = useLedgerStore();
 const { currentId } = storeToRefs(store);
 
-const range = ref<[Date, Date] | null>(null);
-const granularity = ref<'day' | 'month'>('month');
+const rng = ref<{ from?: string; to?: string }>({});
+const granularity = ref<'day' | 'week' | 'month'>('day');
 const trend = ref<TrendPoint[]>([]);
 const expenseByCat = ref<CategoryStat[]>([]);
 const byPlatform = ref<PlatformStat[]>([]);
@@ -23,8 +23,7 @@ const fmt = (v: number) => `¥${centsToYuan(v)}`;
 async function load() {
   if (!currentId.value) return;
   loading.value = true;
-  const { from, to } = dayRangeToDateTime(range.value);
-  const base = { ledger_id: currentId.value, from, to };
+  const base = { ledger_id: currentId.value, ...rng.value };
   try {
     const [t, c, p] = await Promise.all([
       statsApi.trend({ ...base, granularity: granularity.value }),
@@ -38,7 +37,11 @@ async function load() {
     loading.value = false;
   }
 }
-watch([currentId, granularity], load, { immediate: true });
+function onRange(r: { from?: string; to?: string }) {
+  rng.value = r;
+  load();
+}
+watch([currentId, granularity], load);
 
 const trendOption = computed(() => ({
   tooltip: { trigger: 'axis', valueFormatter: fmt },
@@ -99,19 +102,13 @@ const hasPlat = computed(() => byPlatform.value.length > 0);
 <template>
   <div v-loading="loading">
     <div class="toolbar">
-      <el-date-picker
-        v-model="range"
-        type="daterange"
-        range-separator="至"
-        start-placeholder="开始"
-        end-placeholder="结束"
-        @change="load"
-      />
+      <RangeBar default="month" @change="onRange" />
+      <div class="flex-spacer" />
       <el-radio-group v-model="granularity">
         <el-radio-button value="month">按月</el-radio-button>
+        <el-radio-button value="week">按周</el-radio-button>
         <el-radio-button value="day">按日</el-radio-button>
       </el-radio-group>
-      <el-button type="primary" @click="load">查询</el-button>
     </div>
 
     <el-card shadow="never" style="margin-bottom: 16px">

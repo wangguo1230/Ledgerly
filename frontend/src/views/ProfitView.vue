@@ -4,27 +4,30 @@ import { storeToRefs } from 'pinia';
 import { useLedgerStore } from '@/stores/ledger';
 import { statsApi } from '@/api';
 import type { ProductProfit } from '@/api/types';
-import { dayRangeToDateTime } from '@/utils/date';
 import AmountText from '@/components/AmountText.vue';
+import RangeBar from '@/components/RangeBar.vue';
 
 const store = useLedgerStore();
 const { currentId } = storeToRefs(store);
 
 const list = ref<ProductProfit[]>([]);
 const loading = ref(false);
-const range = ref<[Date, Date] | null>(null);
+const rng = ref<{ from?: string; to?: string }>({});
 
 async function load() {
   if (!currentId.value) return;
   loading.value = true;
-  const { from, to } = dayRangeToDateTime(range.value);
   try {
-    list.value = await statsApi.profit({ ledger_id: currentId.value, from, to });
+    list.value = await statsApi.profit({ ledger_id: currentId.value, ...rng.value });
   } finally {
     loading.value = false;
   }
 }
-watch(currentId, load, { immediate: true });
+function onRange(r: { from?: string; to?: string }) {
+  rng.value = r;
+  load();
+}
+watch(currentId, load);
 
 const totals = computed(() =>
   list.value.reduce(
@@ -42,15 +45,7 @@ const totals = computed(() =>
   <div v-loading="loading" class="sheet">
     <div class="page-head">利润核算</div>
     <div class="toolbar">
-      <el-date-picker
-        v-model="range"
-        type="daterange"
-        range-separator="至"
-        start-placeholder="开始"
-        end-placeholder="结束"
-        @change="load"
-      />
-      <el-button type="primary" @click="load">查询</el-button>
+      <RangeBar default="month" @change="onRange" />
     </div>
 
     <el-row :gutter="16" style="margin-bottom: 16px">
