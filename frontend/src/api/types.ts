@@ -46,6 +46,25 @@ export interface SourcePlatform {
   icon: string | null;
   sort_order: number;
   is_system: number;
+  initial_balance: number;
+  created_at: string;
+}
+
+/** 账户（=来源平台）+ 当前余额 */
+export interface AccountBalance extends SourcePlatform {
+  balance: number;
+}
+
+/** 转账（带账户名） */
+export interface Transfer {
+  id: number;
+  from_platform_id: number;
+  to_platform_id: number;
+  from_name: string;
+  to_name: string;
+  amount: number;
+  occurred_at: string;
+  remark: string | null;
   created_at: string;
 }
 

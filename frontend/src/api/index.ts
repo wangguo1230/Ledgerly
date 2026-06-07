@@ -11,6 +11,8 @@ import type {
   CategoryNode,
   FlowType,
   SourcePlatform,
+  AccountBalance,
+  Transfer,
   Product,
   Transaction,
   Paged,
@@ -64,14 +66,32 @@ export const categoryApi = {
   remove: (id: number) => http.delete(`/categories/${id}`).then((r) => r.data),
 };
 
-// —— 来源平台 ——
+// —— 来源平台 / 账户 ——
 export const platformApi = {
   list: () => http.get<SourcePlatform[]>('/platforms').then((r) => r.data),
-  create: (data: { name: string; icon?: string | null }) =>
+  create: (data: { name: string; icon?: string | null; initial_balance?: number }) =>
     http.post<SourcePlatform>('/platforms', data).then((r) => r.data),
-  update: (id: number, data: Partial<{ name: string; icon: string | null }>) =>
+  update: (id: number, data: Partial<{ name: string; icon: string | null; initial_balance: number }>) =>
     http.put<SourcePlatform>(`/platforms/${id}`, data).then((r) => r.data),
   remove: (id: number) => http.delete(`/platforms/${id}`).then((r) => r.data),
+};
+
+// —— 账户余额 ——
+export const accountApi = {
+  balances: () => http.get<AccountBalance[]>('/accounts').then((r) => r.data),
+};
+
+// —— 转账 ——
+export const transferApi = {
+  list: () => http.get<Transfer[]>('/transfers').then((r) => r.data),
+  create: (data: {
+    from_platform_id: number;
+    to_platform_id: number;
+    amount: number;
+    occurred_at: string;
+    remark?: string | null;
+  }) => http.post<Transfer>('/transfers', data).then((r) => r.data),
+  remove: (id: number) => http.delete(`/transfers/${id}`).then((r) => r.data),
 };
 
 // —— 商品 ——

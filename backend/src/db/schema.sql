@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS source_platform (
   UNIQUE (user_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_platform_user ON source_platform(user_id, sort_order);
+-- 账户期初余额（开始记账时该账户已有的钱，分）；幂等迁移，兼容已建表
+ALTER TABLE source_platform ADD COLUMN IF NOT EXISTS initial_balance INTEGER NOT NULL DEFAULT 0;
+
+-- 转账：账户间资金转移（不计入收支统计）
+CREATE TABLE IF NOT EXISTS transfer (
+  id               SERIAL PRIMARY KEY,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_platform_id INTEGER NOT NULL REFERENCES source_platform(id) ON DELETE CASCADE,
+  to_platform_id   INTEGER NOT NULL REFERENCES source_platform(id) ON DELETE CASCADE,
+  amount           INTEGER NOT NULL CHECK (amount > 0),
+  occurred_at      TEXT    NOT NULL,
+  remark           TEXT,
+  created_at       TEXT    NOT NULL DEFAULT to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD HH24:MI:SS')
+);
+CREATE INDEX IF NOT EXISTS idx_transfer_user ON transfer(user_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_transfer_from ON transfer(from_platform_id);
+CREATE INDEX IF NOT EXISTS idx_transfer_to   ON transfer(to_platform_id);
 
 -- 商品：仅生意账本，承载成本价/售价用于利润核算
 CREATE TABLE IF NOT EXISTS product (

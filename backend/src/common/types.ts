@@ -48,6 +48,24 @@ export interface SourcePlatformRow {
   icon: string | null;
   sort_order: number;
   is_system: number; // SQLite 无布尔，0/1
+  initial_balance: number; // 期初余额（分）
+  created_at: string;
+}
+
+/** 账户（=来源平台）+ 当前余额 */
+export interface AccountBalanceRow extends SourcePlatformRow {
+  balance: number; // 当前余额（分）= 期初 + 收入 − 支出 + 转入 − 转出
+}
+
+/** 转账：账户间资金转移 */
+export interface TransferRow {
+  id: number;
+  user_id: number;
+  from_platform_id: number;
+  to_platform_id: number;
+  amount: number;
+  occurred_at: string;
+  remark: string | null;
   created_at: string;
 }
 

@@ -50,7 +50,7 @@ const navItems: NavItem[] = [
   { index: '/products', title: '商品管理', icon: Goods, business: true },
   { index: '/profit', title: '利润核算', icon: Money, business: true },
   { index: '/reports', title: '报表', icon: TrendCharts },
-  { index: '/platforms', title: '来源平台', icon: Wallet },
+  { index: '/platforms', title: '账户', icon: Wallet },
   { index: '/ledgers', title: '账本管理', icon: Notebook },
 ];
 

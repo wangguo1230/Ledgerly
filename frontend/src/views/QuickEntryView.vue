@@ -7,7 +7,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { ElMessage } from 'element-plus';
 import { useLedgerStore } from '@/stores/ledger';
-import { categoryApi, platformApi, productApi, transactionApi } from '@/api';
+import { categoryApi, platformApi, productApi, transactionApi, transferApi } from '@/api';
 import type { Category, FlowType, Product, SourcePlatform } from '@/api/types';
 import { yuanToCents, centsToYuan, formatCents } from '@/utils/money';
 import { now } from '@/utils/date';
@@ -18,6 +18,9 @@ const store = useLedgerStore();
 const { currentId, isBusiness } = storeToRefs(store);
 
 const flow = ref<FlowType>('income');
+const transferMode = ref(false); // 转账模式
+const transferFrom = ref<number | null>(null);
+const transferTo = ref<number | null>(null);
 const amountText = ref('');
 const categoryId = ref<number | null>(null);
 const platformId = ref<number | null>(null);
@@ -113,8 +116,50 @@ watch(flow, () => {
 function setFlow(f: FlowType) {
   flow.value = f;
 }
+function pickMode(m: 'expense' | 'income' | 'transfer') {
+  if (m === 'transfer') {
+    transferMode.value = true;
+  } else {
+    transferMode.value = false;
+    setFlow(m);
+  }
+}
+
+async function saveTransfer() {
+  if (!currentId.value) return;
+  if (!transferFrom.value || !transferTo.value)
+    return ElMessage.warning('请选择转出 / 转入账户');
+  if (transferFrom.value === transferTo.value)
+    return ElMessage.warning('转出与转入账户不能相同');
+  let cents: number;
+  try {
+    cents = yuanToCents(amountText.value);
+  } catch {
+    return ElMessage.warning('请输入正确金额');
+  }
+  if (cents <= 0) return ElMessage.warning('金额需大于 0');
+  saving.value = true;
+  try {
+    await transferApi.create({
+      from_platform_id: transferFrom.value,
+      to_platform_id: transferTo.value,
+      amount: cents,
+      occurred_at: now(),
+      remark: remark.value || null,
+    });
+    savedCount.value += 1;
+    justSaved.value = true;
+    setTimeout(() => (justSaved.value = false), 700);
+    amountText.value = '';
+    remark.value = '';
+    focusAmount();
+  } finally {
+    saving.value = false;
+  }
+}
 
 async function save(continueAfter: boolean) {
+  if (transferMode.value) return saveTransfer();
   if (!currentId.value) return;
   let cents: number;
   try {
@@ -191,9 +236,9 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault();
     save(true);
   } else if (!typing && (e.key === 'e' || e.key === 'E')) {
-    setFlow('expense');
+    pickMode('expense');
   } else if (!typing && (e.key === 'i' || e.key === 'I')) {
-    setFlow('income');
+    pickMode('income');
   }
 }
 
@@ -208,15 +253,30 @@ const isIncome = computed(() => flow.value === 'income');
 
 <template>
   <div class="quick-wrap ul-rise">
-    <div class="receipt" :class="{ 'is-saved': justSaved, 'is-income': isIncome }">
+    <div
+      class="receipt"
+      :class="{ 'is-saved': justSaved, 'is-income': isIncome && !transferMode, 'is-transfer': transferMode }"
+    >
       <div class="voucher-head">
         <span class="vh-title">记 账 凭 证</span>
-        <span class="vh-sub">{{ isIncome ? '收 入' : '支 出' }}</span>
+        <span class="vh-sub">{{ transferMode ? '转 账' : isIncome ? '收 入' : '支 出' }}</span>
       </div>
-      <!-- 收支切换 -->
+      <!-- 收支 / 转账切换 -->
       <div class="flow-toggle">
-        <button :class="{ on: !isIncome }" @click="setFlow('expense')">支出</button>
-        <button :class="{ on: isIncome }" @click="setFlow('income')">收入</button>
+        <button :class="{ on: !transferMode && !isIncome }" @click="pickMode('expense')">支出</button>
+        <button :class="{ on: !transferMode && isIncome }" @click="pickMode('income')">收入</button>
+        <button :class="{ on: transferMode }" @click="pickMode('transfer')">转账</button>
+      </div>
+
+      <!-- 转账：从账户 → 到账户 -->
+      <div v-if="transferMode" class="transfer-row">
+        <el-select v-model="transferFrom" placeholder="从账户" style="flex: 1">
+          <el-option v-for="p in platforms" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+        <span class="tf-arrow">→</span>
+        <el-select v-model="transferTo" placeholder="到账户" style="flex: 1">
+          <el-option v-for="p in platforms" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
       </div>
 
       <!-- 金额 -->
@@ -233,8 +293,14 @@ const isIncome = computed(() => flow.value === 'income');
       </div>
       <div class="stage-rule" />
 
+      <!-- 转账：备注 -->
+      <template v-if="transferMode">
+        <div class="field-label">备注</div>
+        <el-input v-model="remark" placeholder="可选（如：微信提现到银行卡）" />
+      </template>
+
       <!-- 商品（选已有 或 直接打字新建临时商品）：填成本即算毛利 -->
-      <template v-if="showProduct">
+      <template v-if="!transferMode && showProduct">
         <div class="field-label">商品（选已有 · 或直接打字新建 · 算利润可选）</div>
         <div class="prod-row">
           <el-select
@@ -275,40 +341,42 @@ const isIncome = computed(() => flow.value === 'income');
         </div>
       </template>
 
-      <!-- 类目 -->
-      <div class="field-label">选个类目</div>
-      <div class="chips">
-        <button
-          v-for="c in flowCategories"
-          :key="c.id"
-          class="chip"
-          :class="{ active: categoryId === c.id }"
-          @click="categoryId = c.id"
-        >
-          {{ c.name }}
-        </button>
-        <span v-if="!flowCategories.length" class="empty-hint">
-          暂无{{ isIncome ? '收入' : '支出' }}类目，请先到「类目管理」添加
-        </span>
-      </div>
+      <template v-if="!transferMode">
+        <!-- 类目 -->
+        <div class="field-label">选个类目</div>
+        <div class="chips">
+          <button
+            v-for="c in flowCategories"
+            :key="c.id"
+            class="chip"
+            :class="{ active: categoryId === c.id }"
+            @click="categoryId = c.id"
+          >
+            {{ c.name }}
+          </button>
+          <span v-if="!flowCategories.length" class="empty-hint">
+            暂无{{ isIncome ? '收入' : '支出' }}类目，请先到「类目管理」添加
+          </span>
+        </div>
 
-      <!-- 来源 + 备注/内容 -->
-      <div class="row-two" :class="{ single: showProduct }">
-        <div class="mini-field">
-          <div class="field-label">来源平台</div>
-          <el-select v-model="platformId" clearable placeholder="可选" style="width: 100%">
-            <el-option v-for="p in platforms" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
+        <!-- 来源 + 备注/内容 -->
+        <div class="row-two" :class="{ single: showProduct }">
+          <div class="mini-field">
+            <div class="field-label">来源平台</div>
+            <el-select v-model="platformId" clearable placeholder="可选" style="width: 100%">
+              <el-option v-for="p in platforms" :key="p.id" :label="p.name" :value="p.id" />
+            </el-select>
+          </div>
+          <div v-if="!showProduct" class="mini-field">
+            <div class="field-label">备注</div>
+            <el-input v-model="remark" placeholder="可选" />
+          </div>
         </div>
-        <div v-if="!showProduct" class="mini-field">
-          <div class="field-label">备注</div>
-          <el-input v-model="remark" placeholder="可选" />
+        <div v-if="showProduct" class="content-field">
+          <div class="field-label">内容</div>
+          <RichTextEditor v-model="remark" placeholder="商品内容 / 账号 / 订单详情…（支持加粗、列表、颜色）" />
         </div>
-      </div>
-      <div v-if="showProduct" class="content-field">
-        <div class="field-label">内容</div>
-        <RichTextEditor v-model="remark" placeholder="商品内容 / 账号 / 订单详情…（支持加粗、列表、颜色）" />
-      </div>
+      </template>
 
       <!-- 操作 -->
       <div class="actions">
@@ -355,6 +423,20 @@ const isIncome = computed(() => flow.value === 'income');
 }
 .receipt.is-income::before {
   background: #2f5d7c;
+}
+.receipt.is-transfer::before {
+  background: #2a2418;
+}
+.transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+}
+.transfer-row .tf-arrow {
+  color: var(--terra);
+  font-weight: 700;
+  font-size: 18px;
 }
 /* 凭证抬头 */
 .voucher-head {
@@ -429,7 +511,7 @@ const isIncome = computed(() => flow.value === 'income');
   justify-content: center;
   gap: 6px;
   padding: 18px 0 10px;
-  color: v-bind("isIncome ? '#2f5d7c' : '#b9472f'");
+  color: v-bind("transferMode ? '#2a2418' : isIncome ? '#2f5d7c' : '#b9472f'");
 }
 .cny {
   font-family: var(--font-display);

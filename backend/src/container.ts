@@ -8,6 +8,7 @@ import { CategoryService } from './modules/category/category.service.js';
 import { SourcePlatformService } from './modules/source-platform/source-platform.service.js';
 import { ProductService } from './modules/product/product.service.js';
 import { TransactionService } from './modules/transaction/transaction.service.js';
+import { TransferService } from './modules/transfer/transfer.service.js';
 import { StatsService } from './modules/stats/stats.service.js';
 
 export interface Container {
@@ -18,6 +19,7 @@ export interface Container {
   platform: SourcePlatformService;
   product: ProductService;
   transaction: TransactionService;
+  transfer: TransferService;
   stats: StatsService;
 }
 
@@ -30,6 +32,7 @@ export function createContainer(db: Db): Container {
     platform: new SourcePlatformService(db),
     product: new ProductService(db),
     transaction: new TransactionService(db),
+    transfer: new TransferService(db),
     stats: new StatsService(db),
   };
 }

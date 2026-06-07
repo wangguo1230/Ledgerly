@@ -15,6 +15,7 @@ import { registerCategoryRoutes } from './modules/category/category.routes.js';
 import { registerPlatformRoutes } from './modules/source-platform/source-platform.routes.js';
 import { registerProductRoutes } from './modules/product/product.routes.js';
 import { registerTransactionRoutes } from './modules/transaction/transaction.routes.js';
+import { registerTransferRoutes } from './modules/transfer/transfer.routes.js';
 import { registerStatsRoutes } from './modules/stats/stats.routes.js';
 
 export function buildApp(db: Db): FastifyInstance {
@@ -77,6 +78,7 @@ export function buildApp(db: Db): FastifyInstance {
         registerPlatformRoutes(secured, c);
         registerProductRoutes(secured, c);
         registerTransactionRoutes(secured, c);
+        registerTransferRoutes(secured, c);
         registerStatsRoutes(secured, c);
       });
     },

@@ -2,13 +2,14 @@
  * 来源平台模块 —— 按用户隔离的字典（微信/支付宝/银行卡/现金…）。
  */
 import type { Db } from '../../db/connection.js';
-import type { SourcePlatformRow } from '../../common/types.js';
+import type { SourcePlatformRow, AccountBalanceRow } from '../../common/types.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../common/errors.js';
 
 export interface CreatePlatformInput {
   name: string;
   icon?: string | null;
   sort_order?: number;
+  initial_balance?: number;
 }
 
 export type UpdatePlatformInput = Partial<CreatePlatformInput>;
@@ -19,6 +20,25 @@ export class SourcePlatformRepository {
   findByUser(userId: number): Promise<SourcePlatformRow[]> {
     return this.db.query<SourcePlatformRow>(
       'SELECT * FROM source_platform WHERE user_id = $1 ORDER BY sort_order, id',
+      [userId],
+    );
+  }
+
+  /** 各账户当前余额 = 期初 + 收入 − 支出 + 转入 − 转出（跨该用户全部账本） */
+  findBalances(userId: number): Promise<AccountBalanceRow[]> {
+    return this.db.query<AccountBalanceRow>(
+      `SELECT sp.*,
+         sp.initial_balance
+         + COALESCE((
+             SELECT SUM(CASE WHEN t.flow_type='income' THEN t.amount ELSE -t.amount END)
+             FROM txn t JOIN ledger l ON t.ledger_id = l.id
+             WHERE l.user_id = $1 AND t.source_platform_id = sp.id), 0)
+         + COALESCE((SELECT SUM(amount) FROM transfer WHERE user_id = $1 AND to_platform_id = sp.id), 0)
+         - COALESCE((SELECT SUM(amount) FROM transfer WHERE user_id = $1 AND from_platform_id = sp.id), 0)
+         AS balance
+       FROM source_platform sp
+       WHERE sp.user_id = $1
+       ORDER BY sp.sort_order, sp.id`,
       [userId],
     );
   }
@@ -36,8 +56,8 @@ export class SourcePlatformRepository {
 
   async insert(userId: number, input: CreatePlatformInput): Promise<number> {
     const row = await this.db.one<{ id: number }>(
-      'INSERT INTO source_platform (user_id, name, icon, sort_order, is_system) VALUES ($1, $2, $3, $4, 0) RETURNING id',
-      [userId, input.name, input.icon ?? null, input.sort_order ?? 0],
+      'INSERT INTO source_platform (user_id, name, icon, sort_order, is_system, initial_balance) VALUES ($1, $2, $3, $4, 0, $5) RETURNING id',
+      [userId, input.name, input.icon ?? null, input.sort_order ?? 0, input.initial_balance ?? 0],
     );
     return row!.id;
   }
@@ -52,6 +72,7 @@ export class SourcePlatformRepository {
     if (fields.name !== undefined) push('name', fields.name);
     if (fields.icon !== undefined) push('icon', fields.icon);
     if (fields.sort_order !== undefined) push('sort_order', fields.sort_order);
+    if (fields.initial_balance !== undefined) push('initial_balance', fields.initial_balance);
     if (sets.length === 0) return;
     values.push(id);
     await this.db.query(
@@ -73,6 +94,11 @@ export class SourcePlatformService {
 
   list(userId: number): Promise<SourcePlatformRow[]> {
     return this.repo.findByUser(userId);
+  }
+
+  /** 各账户当前余额 */
+  balances(userId: number) {
+    return this.repo.findBalances(userId);
   }
 
   async get(userId: number, id: number): Promise<SourcePlatformRow> {

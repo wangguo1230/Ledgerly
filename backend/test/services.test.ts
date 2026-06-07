@@ -569,6 +569,52 @@ describe('统计聚合 Stats', () => {
   });
 });
 
+describe('账户余额与转账', () => {
+  it('转账在账户间移动余额，不计入收支统计', async () => {
+    const { c, userId } = await freshContainer(false);
+    const lg = await c.ledger.create(userId, { name: 'A', type: 'business' });
+    const wx = await c.platform.create(userId, { name: '微信', initial_balance: 10000 });
+    const bank = await c.platform.create(userId, { name: '银行卡', initial_balance: 0 });
+    await c.transaction.create(userId, {
+      ledger_id: lg.id,
+      flow_type: 'income',
+      amount: 500,
+      source_platform_id: wx.id,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    await c.transfer.create(userId, {
+      from_platform_id: wx.id,
+      to_platform_id: bank.id,
+      amount: 300,
+      occurred_at: '2026-06-02 10:00:00',
+    });
+    const accounts = await c.platform.balances(userId);
+    expect(accounts.find((a) => a.id === wx.id)!.balance).toBe(10200); // 10000+500-300
+    expect(accounts.find((a) => a.id === bank.id)!.balance).toBe(300);
+    // 转账不污染收支
+    const sum = await c.stats.summary(userId, { ledger_id: lg.id });
+    expect(sum.income).toBe(500);
+    expect(sum.expense).toBe(0);
+  });
+
+  it('拒绝相同账户/零金额；跨用户账户禁止', async () => {
+    const { db, c, userId: A } = await freshContainer(false);
+    const B = await bareUser(db, 'userB');
+    const aWx = await c.platform.create(A, { name: '微信' });
+    const aBank = await c.platform.create(A, { name: '银行卡' });
+    const bWx = await c.platform.create(B, { name: '微信' });
+    await expect(
+      c.transfer.create(A, { from_platform_id: aWx.id, to_platform_id: aWx.id, amount: 100, occurred_at: '2026-06-01 10:00:00' }),
+    ).rejects.toThrow(ValidationError);
+    await expect(
+      c.transfer.create(A, { from_platform_id: aWx.id, to_platform_id: aBank.id, amount: 0, occurred_at: '2026-06-01 10:00:00' }),
+    ).rejects.toThrow(ValidationError);
+    await expect(
+      c.transfer.create(A, { from_platform_id: aWx.id, to_platform_id: bWx.id, amount: 100, occurred_at: '2026-06-01 10:00:00' }),
+    ).rejects.toThrow(ForbiddenError);
+  });
+});
+
 describe('来源平台字典（按用户）', () => {
   it('系统预置平台不可删除', async () => {
     const { c, userId } = await freshContainer(true);

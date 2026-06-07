@@ -22,7 +22,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'reports', name: 'reports', component: () => import('@/views/ReportsView.vue'), meta: { title: '报表' } },
       { path: 'products', name: 'products', component: () => import('@/views/ProductsView.vue'), meta: { title: '商品管理', business: true } },
       { path: 'profit', name: 'profit', component: () => import('@/views/ProfitView.vue'), meta: { title: '利润核算', business: true } },
-      { path: 'platforms', name: 'platforms', component: () => import('@/views/PlatformsView.vue'), meta: { title: '来源平台' } },
+      { path: 'platforms', name: 'platforms', component: () => import('@/views/PlatformsView.vue'), meta: { title: '账户' } },
       { path: 'ledgers', name: 'ledgers', component: () => import('@/views/LedgersView.vue'), meta: { title: '账本管理' } },
     ],
   },
