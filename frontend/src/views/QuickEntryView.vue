@@ -29,44 +29,58 @@ const savedCount = ref(0);
 const categories = ref<Category[]>([]);
 const platforms = ref<SourcePlatform[]>([]);
 const products = ref<Product[]>([]);
-const productId = ref<number | null>(null);
+// 数字=已有商品 id；字符串=临时新建的商品名
+const productSel = ref<number | string | null>(null);
 const quantity = ref(1);
 const cost = ref<number | null>(null); // 本笔成本(单价，分)
+const saveAsProduct = ref(false); // 临时商品是否存进商品库
 
 const flowCategories = computed(() => categories.value.filter((c) => c.flow_type === flow.value));
 
-// 仅生意账本的收入才显示「关联商品」
+// 仅生意账本的收入才显示「商品」
 const showProduct = computed(() => isBusiness.value && flow.value === 'income');
-const formProduct = computed(() =>
-  productId.value != null ? products.value.find((p) => p.id === productId.value) ?? null : null,
+const selectedProduct = computed(() =>
+  typeof productSel.value === 'number'
+    ? products.value.find((p) => p.id === productSel.value) ?? null
+    : null,
 );
+const isAdhoc = computed(
+  () => typeof productSel.value === 'string' && productSel.value.trim() !== '',
+);
+const hasItem = computed(() => selectedProduct.value != null || isAdhoc.value);
+
 const grossProfitCents = computed(() => {
-  const p = formProduct.value;
-  if (!p) return null;
+  if (!hasItem.value) return null;
+  const unitCost = cost.value ?? selectedProduct.value?.cost_price ?? null;
+  if (unitCost == null) return null;
   let cents = 0;
   try {
     cents = yuanToCents(amountText.value);
   } catch {
     return null;
   }
-  const unitCost = cost.value ?? p.cost_price;
   return cents - unitCost * quantity.value;
 });
 
 function onProductChange() {
-  if (productId.value == null) {
+  saveAsProduct.value = false;
+  if (productSel.value == null || productSel.value === '') {
     cost.value = null;
     return;
   }
   if (quantity.value < 1) quantity.value = 1;
-  cost.value = formProduct.value?.cost_price ?? null; // 默认带出商品成本，可改
-  fillFromProduct();
+  if (selectedProduct.value) {
+    // 选了已有商品：自动带出成本与售价
+    cost.value = selectedProduct.value.cost_price;
+    fillFromProduct();
+  }
+  // 临时新建：成本/金额由用户自己填
 }
 function onQtyChange() {
-  if (productId.value != null) fillFromProduct();
+  if (selectedProduct.value) fillFromProduct();
 }
 function fillFromProduct() {
-  const p = formProduct.value;
+  const p = selectedProduct.value;
   if (p) amountText.value = centsToYuan(p.sale_price * quantity.value);
 }
 
@@ -89,9 +103,10 @@ watch(currentId, loadMeta, { immediate: true });
 watch(flow, () => {
   ensureCategory();
   if (flow.value !== 'income') {
-    productId.value = null;
+    productSel.value = null;
     quantity.value = 1;
     cost.value = null;
+    saveAsProduct.value = false;
   }
 });
 
@@ -114,15 +129,34 @@ async function save(continueAfter: boolean) {
   }
   saving.value = true;
   try {
-    const linkProduct = showProduct.value && productId.value != null;
+    let productId: number | null = typeof productSel.value === 'number' ? productSel.value : null;
+    let itemName: string | null = isAdhoc.value ? (productSel.value as string).trim() : null;
+    // 可选：把临时商品存进商品库并改为关联
+    if (showProduct.value && isAdhoc.value && saveAsProduct.value && itemName) {
+      try {
+        const created = await productApi.create({
+          ledger_id: currentId.value,
+          name: itemName,
+          cost_price: cost.value ?? 0,
+          sale_price: cents,
+        });
+        products.value.push(created);
+        productId = created.id;
+        itemName = null;
+      } catch {
+        /* 创建失败则仍按临时项记账 */
+      }
+    }
+    const linkItem = showProduct.value && hasItem.value;
     await transactionApi.create({
       ledger_id: currentId.value,
       flow_type: flow.value,
       amount: cents,
       category_id: categoryId.value,
-      product_id: linkProduct ? productId.value : null,
-      quantity: linkProduct ? quantity.value : null,
-      cost_snapshot: linkProduct ? cost.value : null,
+      product_id: linkItem ? productId : null,
+      item_name: linkItem ? itemName : null,
+      quantity: linkItem ? quantity.value : null,
+      cost_snapshot: linkItem ? cost.value : null,
       source_platform_id: platformId.value,
       occurred_at: now(),
       remark: remark.value || null,
@@ -132,9 +166,10 @@ async function save(continueAfter: boolean) {
     setTimeout(() => (justSaved.value = false), 700);
     amountText.value = '';
     remark.value = '';
-    productId.value = null;
+    productSel.value = null;
     quantity.value = 1;
     cost.value = null;
+    saveAsProduct.value = false;
     if (!continueAfter) {
       platformId.value = null;
     }
@@ -198,15 +233,18 @@ const isIncome = computed(() => flow.value === 'income');
       </div>
       <div class="stage-rule" />
 
-      <!-- 关联商品（仅生意账本收入）：选后自动带出售价并算毛利 -->
+      <!-- 商品（选已有 或 直接打字新建临时商品）：填成本即算毛利 -->
       <template v-if="showProduct">
-        <div class="field-label">关联商品（算利润 · 可选）</div>
+        <div class="field-label">商品（选已有 · 或直接打字新建 · 算利润可选）</div>
         <div class="prod-row">
           <el-select
-            v-model="productId"
+            v-model="productSel"
             clearable
             filterable
-            placeholder="选商品自动带出售价"
+            allow-create
+            default-first-option
+            :reserve-keyword="false"
+            placeholder="选商品，或直接输入临时商品名"
             style="flex: 1"
             @change="onProductChange"
           >
@@ -214,23 +252,23 @@ const isIncome = computed(() => flow.value === 'income');
               <span class="opt-name">{{ p.name }}</span>
               <span class="opt-meta">售¥{{ formatCents(p.sale_price) }} · 成本¥{{ formatCents(p.cost_price) }}</span>
             </el-option>
-            <template v-if="!products.length" #empty>
-              <div class="opt-empty">还没有商品，去「商品管理」添加</div>
-            </template>
           </el-select>
           <el-input-number
-            v-if="productId"
+            v-if="hasItem"
             v-model="quantity"
             :min="1"
             style="width: 128px"
             @change="onQtyChange"
           />
         </div>
-        <div v-if="productId" class="cost-line">
+        <div v-if="hasItem" class="cost-line">
           <span class="cost-tag">本笔成本</span>
           <div class="cost-input"><AmountInput v-model="cost" /></div>
-          <span class="cost-note">默认商品成本，可改成这批进价</span>
+          <span class="cost-note">{{ selectedProduct ? '默认商品成本，可改成这批进价' : '填了才算利润' }}</span>
         </div>
+        <el-checkbox v-if="isAdhoc" v-model="saveAsProduct" class="save-prod">
+          把「{{ productSel }}」存进商品库，以后可复用
+        </el-checkbox>
         <div v-if="grossProfitCents != null" class="qprofit">
           本笔毛利 ≈
           <b :class="grossProfitCents >= 0 ? 'pos' : 'neg'">¥{{ formatCents(grossProfitCents) }}</b>
@@ -498,6 +536,10 @@ const isIncome = computed(() => flow.value === 'income');
 .cost-note {
   font-size: 12px;
   color: var(--ink-faint);
+}
+.save-prod {
+  margin-top: 8px;
+  color: var(--ink-soft);
 }
 .qprofit {
   margin-top: 8px;

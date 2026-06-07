@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS txn (
   created_at         TEXT    NOT NULL DEFAULT to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD HH24:MI:SS'),
   updated_at         TEXT    NOT NULL DEFAULT to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD HH24:MI:SS')
 );
+-- 临时商品名（直接录入、未进商品库的商品标签）；幂等迁移，兼容已建表
+ALTER TABLE txn ADD COLUMN IF NOT EXISTS item_name TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_txn_ledger_time ON txn(ledger_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_txn_category    ON txn(category_id);
 CREATE INDEX IF NOT EXISTS idx_txn_flow        ON txn(ledger_id, flow_type);

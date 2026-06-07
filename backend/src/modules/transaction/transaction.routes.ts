@@ -22,6 +22,7 @@ const createSchema = z.object({
   amount: zCents,
   category_id: z.coerce.number().int().positive().nullable().optional(),
   product_id: z.coerce.number().int().positive().nullable().optional(),
+  item_name: z.string().max(100).nullable().optional(),
   quantity: z.coerce.number().int().nullable().optional(),
   cost_snapshot: zCents.nullable().optional(),
   source_platform_id: z.coerce.number().int().positive().nullable().optional(),

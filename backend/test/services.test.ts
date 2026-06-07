@@ -387,6 +387,61 @@ describe('每笔单独填成本（成本随批变化）', () => {
   });
 });
 
+describe('临时商品（直接录入、不入库）', () => {
+  it('临时项(item_name+成本，无product_id)计入利润，按名称分行', async () => {
+    const { c, userId } = await freshContainer(false);
+    const biz = await c.ledger.create(userId, { name: '店', type: 'business' });
+    await c.transaction.create(userId, {
+      ledger_id: biz.id,
+      flow_type: 'income',
+      amount: 6000,
+      item_name: '某游戏代充',
+      cost_snapshot: 4000,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    const profit = await c.stats.productProfit(userId, { ledger_id: biz.id });
+    expect(profit).toHaveLength(1);
+    expect(profit[0].name).toBe('某游戏代充');
+    expect(profit[0].revenue).toBe(6000);
+    expect(profit[0].cost).toBe(4000); // 4000 × 数量(默认1)
+    expect(profit[0].profit).toBe(2000);
+  });
+
+  it('同名临时项合并，与正式商品一起分行', async () => {
+    const { c, userId } = await freshContainer(false);
+    const biz = await c.ledger.create(userId, { name: '店', type: 'business' });
+    const prod = await c.product.create(userId, {
+      ledger_id: biz.id,
+      name: 'A卡',
+      cost_price: 100,
+      sale_price: 200,
+    });
+    await c.transaction.create(userId, {
+      ledger_id: biz.id,
+      flow_type: 'income',
+      amount: 200,
+      product_id: prod.id,
+      quantity: 1,
+      occurred_at: '2026-06-01 10:00:00',
+    });
+    for (const d of ['2026-06-02', '2026-06-03']) {
+      await c.transaction.create(userId, {
+        ledger_id: biz.id,
+        flow_type: 'income',
+        amount: 300,
+        item_name: '散货',
+        cost_snapshot: 100,
+        occurred_at: `${d} 10:00:00`,
+      });
+    }
+    const profit = await c.stats.productProfit(userId, { ledger_id: biz.id });
+    expect(profit).toHaveLength(2);
+    const sanhuo = profit.find((p) => p.name === '散货')!;
+    expect(sanhuo.revenue).toBe(600);
+    expect(sanhuo.cost).toBe(200);
+  });
+});
+
 describe('交易更新一致性', () => {
   it('仅改收支方向而未改类目时，自动置空不一致的旧类目', async () => {
     const { c, userId } = await freshContainer(false);

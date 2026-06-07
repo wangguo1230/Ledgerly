@@ -70,6 +70,7 @@ export interface Transaction {
   amount: number;
   category_id: number | null;
   product_id: number | null;
+  item_name: string | null;
   quantity: number | null;
   cost_snapshot: number | null;
   source_platform_id: number | null;
@@ -114,7 +115,6 @@ export interface PlatformStat {
 }
 
 export interface ProductProfit {
-  product_id: number;
   name: string;
   quantity: number;
   revenue: number;

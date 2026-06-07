@@ -72,6 +72,7 @@ export interface TransactionRow {
   amount: number; // 分
   category_id: number | null;
   product_id: number | null;
+  item_name: string | null; // 临时商品名（未进商品库时用）
   quantity: number | null;
   cost_snapshot: number | null; // 成交时成本价快照（分），避免商品改价回溯历史利润
   source_platform_id: number | null;

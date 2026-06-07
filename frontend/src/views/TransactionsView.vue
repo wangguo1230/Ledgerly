@@ -133,6 +133,8 @@ function openCreate() {
     occurred_at: now(),
     remark: '',
   });
+  productSel.value = null;
+  saveAsProduct.value = false;
   dialogVisible.value = true;
 }
 
@@ -149,6 +151,8 @@ function openEdit(row: Transaction) {
     occurred_at: row.occurred_at,
     remark: row.remark ?? '',
   });
+  productSel.value = row.product_id ?? row.item_name ?? null;
+  saveAsProduct.value = false;
   dialogVisible.value = true;
 }
 
@@ -159,7 +163,8 @@ watch(
     if (!dialogVisible.value) return;
     form.category_id = null;
     if (form.flow_type !== 'income') {
-      form.product_id = null;
+      productSel.value = null;
+      saveAsProduct.value = false;
       form.quantity = null;
     }
   },
@@ -171,14 +176,34 @@ async function submit() {
     ElMessage.warning('请输入正确金额');
     return;
   }
+  let productId: number | null = typeof productSel.value === 'number' ? productSel.value : null;
+  let itemName: string | null = isAdhoc.value ? (productSel.value as string).trim() : null;
+  // 可选：把临时商品存进商品库并改为关联
+  if (isContentMode.value && isAdhoc.value && saveAsProduct.value && itemName) {
+    try {
+      const created = await productApi.create({
+        ledger_id: currentId.value,
+        name: itemName,
+        cost_price: form.cost_snapshot ?? 0,
+        sale_price: form.amount,
+      });
+      products.value.push(created);
+      productId = created.id;
+      itemName = null;
+    } catch {
+      /* 创建失败则仍按临时项记账 */
+    }
+  }
+  const linkItem = isContentMode.value && hasItem.value;
   const payload: TransactionPayload = {
     ledger_id: currentId.value,
     flow_type: form.flow_type,
     amount: form.amount,
     category_id: form.category_id,
-    product_id: form.product_id,
-    quantity: form.quantity,
-    cost_snapshot: form.product_id ? form.cost_snapshot : null,
+    product_id: linkItem ? productId : null,
+    item_name: linkItem ? itemName : null,
+    quantity: linkItem ? form.quantity : null,
+    cost_snapshot: linkItem ? form.cost_snapshot : null,
     source_platform_id: form.source_platform_id,
     occurred_at: form.occurred_at,
     remark: form.remark || null,
@@ -206,36 +231,44 @@ function productName(id: number | null): string {
   return products.value.find((p) => p.id === id)?.name ?? '已删除商品';
 }
 
-// —— 卖货智能录入：选商品自动带出售价、当场算毛利 ——
+// —— 卖货智能录入：选已有商品 或 直接打字新建临时商品，当场算毛利 ——
 const productMap = computed(() => new Map(products.value.map((p) => [p.id, p])));
-const formProduct = computed(() =>
-  form.product_id != null ? productMap.value.get(form.product_id) ?? null : null,
+const productSel = ref<number | string | null>(null); // 数字=已有商品id；字符串=临时新名
+const saveAsProduct = ref(false);
+const selectedProduct = computed(() =>
+  typeof productSel.value === 'number' ? productMap.value.get(productSel.value) ?? null : null,
 );
+const isAdhoc = computed(
+  () => typeof productSel.value === 'string' && productSel.value.trim() !== '',
+);
+const hasItem = computed(() => selectedProduct.value != null || isAdhoc.value);
 
 function autoFillAmount() {
-  const p = formProduct.value;
-  if (!p) return;
-  form.amount = p.sale_price * (form.quantity ?? 1);
+  const p = selectedProduct.value;
+  if (p) form.amount = p.sale_price * (form.quantity ?? 1);
 }
 function onProductChange() {
-  if (form.product_id == null) {
+  saveAsProduct.value = false;
+  if (productSel.value == null || productSel.value === '') {
     form.cost_snapshot = null;
     return;
   }
   if (!form.quantity || form.quantity < 1) form.quantity = 1;
-  // 默认带出商品当前成本，可改成本批实际进价
-  form.cost_snapshot = formProduct.value?.cost_price ?? null;
-  autoFillAmount();
+  if (selectedProduct.value) {
+    form.cost_snapshot = selectedProduct.value.cost_price;
+    autoFillAmount();
+  }
+  // 临时新建：成本/金额由用户填
 }
 function onQtyChange() {
-  if (form.product_id != null) autoFillAmount();
+  if (selectedProduct.value) autoFillAmount();
 }
 
-/** 本笔毛利 = 售出金额 − 本笔成本 × 数量（本笔成本默认取商品成本价） */
+/** 本笔毛利 = 售出金额 − 本笔成本 × 数量 */
 const grossProfitCents = computed(() => {
-  const p = formProduct.value;
-  if (!p || form.amount == null) return null;
-  const unitCost = form.cost_snapshot ?? p.cost_price;
+  if (!hasItem.value || form.amount == null) return null;
+  const unitCost = form.cost_snapshot ?? selectedProduct.value?.cost_price ?? null;
+  if (unitCost == null) return null;
   return form.amount - unitCost * (form.quantity ?? 1);
 });
 
@@ -288,6 +321,9 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
       <el-table-column label="商品" min-width="120" v-if="isBusiness">
         <template #default="{ row }">
           <span v-if="row.product_id">{{ productName(row.product_id) }} ×{{ row.quantity ?? 1 }}</span>
+          <span v-else-if="row.item_name" class="adhoc-item"
+            >{{ row.item_name }} ×{{ row.quantity ?? 1 }}<em>临时</em></span
+          >
         </template>
       </el-table-column>
       <el-table-column label="金额" width="140" align="right">
@@ -347,10 +383,13 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
         <template v-if="isBusiness && form.flow_type === 'income'">
           <el-form-item label="商品">
             <el-select
-              v-model="form.product_id"
+              v-model="productSel"
               clearable
               filterable
-              placeholder="可选 · 关联后自动带出售价并算毛利"
+              allow-create
+              default-first-option
+              :reserve-keyword="false"
+              placeholder="可选 · 选商品 或 直接输入临时商品名"
               style="width: 100%"
               @change="onProductChange"
             >
@@ -358,18 +397,15 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
                 <span class="opt-name">{{ p.name }}</span>
                 <span class="opt-meta">售¥{{ formatCents(p.sale_price) }} · 成本¥{{ formatCents(p.cost_price) }}</span>
               </el-option>
-              <template v-if="!products.length" #empty>
-                <div class="opt-empty">还没有商品，先去「商品管理」添加</div>
-              </template>
             </el-select>
           </el-form-item>
-          <el-form-item v-if="form.product_id" label="本笔成本">
+          <el-form-item v-if="hasItem" label="本笔成本">
             <div class="cost-row">
               <div class="cost-input"><AmountInput v-model="form.cost_snapshot" /></div>
-              <span class="cost-hint">默认商品成本，可改成这批实际进价</span>
+              <span class="cost-hint">{{ selectedProduct ? '默认商品成本，可改成这批进价' : '填了才算利润' }}</span>
             </div>
           </el-form-item>
-          <el-form-item v-if="form.product_id" label="数量">
+          <el-form-item v-if="hasItem" label="数量">
             <div class="qty-row">
               <el-input-number v-model="form.quantity" :min="1" @change="onQtyChange" />
               <span v-if="grossProfitCents != null" class="profit-hint">
@@ -377,6 +413,9 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
                 <b :class="grossProfitCents >= 0 ? 'pos' : 'neg'">¥{{ formatCents(grossProfitCents) }}</b>
               </span>
             </div>
+          </el-form-item>
+          <el-form-item v-if="isAdhoc" label=" ">
+            <el-checkbox v-model="saveAsProduct">把「{{ productSel }}」存进商品库，以后可复用</el-checkbox>
           </el-form-item>
         </template>
         <el-form-item label="来源平台">
@@ -452,6 +491,15 @@ const isContentMode = computed(() => isBusiness.value && form.flow_type === 'inc
 .cost-hint {
   font-size: 12px;
   color: var(--ink-faint);
+}
+.adhoc-item em {
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: var(--terra-tint);
+  color: var(--terra-deep);
 }
 .profit-hint {
   font-size: 13px;

@@ -112,6 +112,7 @@ export interface TransactionPayload {
   amount: number;
   category_id?: number | null;
   product_id?: number | null;
+  item_name?: string | null;
   quantity?: number | null;
   cost_snapshot?: number | null;
   source_platform_id?: number | null;

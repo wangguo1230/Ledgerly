@@ -40,8 +40,7 @@ export interface PlatformStat {
 }
 
 export interface ProductProfit {
-  product_id: number;
-  name: string;
+  name: string; // 商品名（正式商品或临时商品名）
   quantity: number;
   revenue: number; // 销售收入(分)
   cost: number; // 成本(分)
@@ -162,15 +161,15 @@ export class StatsService {
     const { clause, params } = this.rangeClause(r, 't');
     const rows = await this.db.query<Omit<ProductProfit, 'profit'>>(
       `SELECT
-         t.product_id AS product_id,
-         COALESCE(pr.name, '已删除商品') AS name,
+         COALESCE(pr.name, t.item_name, '未命名') AS name,
          COALESCE(SUM(t.quantity), 0) AS quantity,
          COALESCE(SUM(t.amount), 0) AS revenue,
          COALESCE(SUM(COALESCE(t.cost_snapshot,0) * COALESCE(t.quantity,0)), 0) AS cost
        FROM txn t
        LEFT JOIN product pr ON t.product_id = pr.id
-       WHERE ${clause} AND t.flow_type = 'income' AND t.product_id IS NOT NULL
-       GROUP BY t.product_id, COALESCE(pr.name, '已删除商品')
+       WHERE ${clause} AND t.flow_type = 'income'
+         AND (t.product_id IS NOT NULL OR t.item_name IS NOT NULL)
+       GROUP BY COALESCE(pr.name, t.item_name, '未命名')
        ORDER BY revenue DESC`,
       params,
     );

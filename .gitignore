@@ -17,3 +17,6 @@ backend/data/
 # 日志与系统文件
 *.log
 .DS_Store
+
+# vue-tsc 增量构建缓存（生成文件）
+*.tsbuildinfo
